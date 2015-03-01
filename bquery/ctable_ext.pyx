@@ -28,6 +28,57 @@ SORTED_COUNT_DISTINCT = 4
 DEF _SORTED_COUNT_DISTINCT = 4
 # ----------------------------------------------------------------------------
 
+# Iteration Section
+@cython.wraparound(False)
+@cython.boundscheck(False)
+cpdef ndarray carray_iterate(carray carray_):
+    cdef:
+        chunk chunk_
+        Py_ssize_t i, chunklen, leftover_elements
+        ndarray in_buffer
+
+    chunklen = carray_.chunklen
+    # in-buffer isn't typed, because cython doesn't support string arrays (?)
+    in_buffer = np.empty(chunklen, dtype=carray_.dtype)
+
+    for i in range(carray_.nchunks):
+        chunk_ = carray_.chunks[i]
+        # decompress into in_buffer
+        chunk_._getitem(0, chunklen, in_buffer.data)
+        yield in_buffer
+
+    leftover_elements = cython.cdiv(carray_.leftover, carray_.atomsize)
+    if leftover_elements > 0:
+        yield carray_.leftover_array[0:leftover_elements]
+
+
+cdef Py_ssize_t carray_size_iterate(carray carray_):
+    cdef:
+        chunk chunk_
+        Py_ssize_t nr_chunks, leftover_elements
+
+    chunklen = carray_.chunklen
+    for i in range(carray_.nchunks):
+        yield chunklen
+
+    leftover_elements = cython.cdiv(carray_.leftover, carray_.atomsize)
+    if leftover_elements > 0:
+        yield leftover_elements
+
+
+cdef Py_ssize_t carray_chunks(carray carray_):
+    cdef:
+        chunk chunk_
+        Py_ssize_t nr_chunks, leftover_elements
+
+    nr_chunks = carray_.nchunks
+    leftover_elements = cython.cdiv(carray_.leftover, carray_.atomsize)
+    if leftover_elements > 0:
+        nr_chunks += 1
+
+    return nr_chunks, leftover_elements
+
+
 # Factorize Section
 @cython.wraparound(False)
 @cython.boundscheck(False)
@@ -68,12 +119,11 @@ cdef void _factorize_str_helper(Py_ssize_t iter_range,
 
 @cython.wraparound(False)
 @cython.boundscheck(False)
-def factorize_str(carray carray_, carray labels=None):
+cpdef factorize_str(carray carray_, carray labels=None):
     cdef:
         chunk chunk_
-        Py_ssize_t n, i, count, chunklen, leftover_elements
+        Py_ssize_t n, i, count, chunklen, nr_chunks, leftover_elements, item_size
         dict reverse
-        ndarray in_buffer
         ndarray[npy_uint64] out_buffer
         kh_str_t *table
 
@@ -83,41 +133,29 @@ def factorize_str(carray carray_, carray labels=None):
 
     n = len(carray_)
     chunklen = carray_.chunklen
+    item_size = carray_.dtype.itemsize + 1  # only for strings
     if labels is None:
         labels = carray([], dtype='int64', expectedlen=n)
-    # in-buffer isn't typed, because cython doesn't support string arrays (?)
-    out_buffer = np.empty(chunklen, dtype='uint64')
-    in_buffer = np.empty(chunklen, dtype=carray_.dtype)
     table = kh_init_str()
+    carray_iterator = carray_iterate(carray_)
+    size_iterator = carray_size_iterate(carray)
+    nr_chunks, leftover_elements = carray_chunks(carray)
+    out_buffer = np.empty(chunklen, dtype='uint64')
 
-    for i in range(carray_.nchunks):
-        chunk_ = carray_.chunks[i]
-        # decompress into in_buffer
-        chunk_._getitem(0, chunklen, in_buffer.data)
-        _factorize_str_helper(chunklen,
-                        carray_.dtype.itemsize + 1,
-                        in_buffer,
+    for i in range(nr_chunks):
+        current_len = size_iterator.next()
+
+        _factorize_str_helper(current_len,
+                        item_size,
+                        carray_iterator.next(),
                         out_buffer,
                         table,
                         &count,
                         reverse,
                         )
+
         # compress out_buffer into labels
-        labels.append(out_buffer.astype(np.int64))
-
-    leftover_elements = cython.cdiv(carray_.leftover, carray_.atomsize)
-    if leftover_elements > 0:
-        _factorize_str_helper(leftover_elements,
-                          carray_.dtype.itemsize + 1,
-                          carray_.leftover_array,
-                          out_buffer,
-                          table,
-                          &count,
-                          reverse,
-                          )
-
-    # compress out_buffer into labels
-    labels.append(out_buffer[:leftover_elements].astype(np.int64))
+        labels.append(out_buffer[0:current_len].astype(np.int64))
 
     kh_destroy_str(table)
 
@@ -155,7 +193,7 @@ cdef void _factorize_int64_helper(Py_ssize_t iter_range,
 
 @cython.wraparound(False)
 @cython.boundscheck(False)
-def factorize_int64(carray carray_, carray labels=None):
+cpdef factorize_int64(carray carray_, carray labels=None):
     cdef:
         chunk chunk_
         Py_ssize_t n, i, count, chunklen, leftover_elements
@@ -241,7 +279,7 @@ cdef void _factorize_int32_helper(Py_ssize_t iter_range,
 
 @cython.wraparound(False)
 @cython.boundscheck(False)
-def factorize_int32(carray carray_, carray labels=None):
+cpdef factorize_int32(carray carray_, carray labels=None):
     cdef:
         chunk chunk_
         Py_ssize_t n, i, count, chunklen, leftover_elements
@@ -329,7 +367,7 @@ cdef void _factorize_float64_helper(Py_ssize_t iter_range,
 
 @cython.wraparound(False)
 @cython.boundscheck(False)
-def factorize_float64(carray carray_, carray labels=None):
+cpdef factorize_float64(carray carray_, carray labels=None):
     cdef:
         chunk chunk_
         Py_ssize_t n, i, count, chunklen, leftover_elements
@@ -385,6 +423,9 @@ def factorize_float64(carray carray_, carray labels=None):
     return labels, reverse
 
 def factorize(carray carray_, carray labels=None):
+    if labels is None:
+        labels = carray([], dtype='int64', expectedlen=len(carray_))
+
     if carray_.dtype == 'int32':
         labels, reverse = factorize_int32(carray_, labels=labels)
     elif carray_.dtype == 'int64':
