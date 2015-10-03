@@ -230,8 +230,17 @@ class ctable(bcolz.ctable):
     # groupby helper functions
     def factorize_groupby_cols(self, groupby_cols):
         """
+        Generate a table listing all unique values and a table mapping each row
+        to it's unique value, for each groupby column.
 
-        :type self: ctable
+        Args:
+            groupby_cols(list): list of column names to group on
+
+        Returns:
+            list: (factor_list) list of ctables, each mapping a row in the
+                dataset to a row in the value_list
+            list: (value_list) list of ctables, each containing all the unique
+                values for a groupby column
         """
         # first check if the factorized arrays already exist
         # unless we need to refresh the cache
@@ -264,9 +273,11 @@ class ctable(bcolz.ctable):
         '''Create unique groups for groupby loop
 
             Args:
-                factor_list:
-                values_list:
-                groupby_cols:
+                factor_list: list of ctables mapping each row to it's
+                    the row for it's groupby column value in the value_list
+                values_list: list of ctables containing all the distinct
+                    values for each groupby column
+                groupby_cols: list of column names to group on
                 array_length:
                 bool_arr:
 
