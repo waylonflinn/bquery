@@ -227,6 +227,26 @@ class ctable(bcolz.ctable):
 
         return ct_agg
 
+    def pivot(row_column_name, column_column_name, input_column_name, operation,
+            bool_arr=None):
+        """
+            Aggregate into a pivot table style output.
+            two groupby columns, one defines rows, one defines columns
+
+            Args:
+                row_column_name (string): column to group on to create rows
+                column_column_name (string): column to group on to create columns
+                input_column_name (string): column to perform operation on
+                operation (string): aggregate operation to use (see groupby)
+                bool_arr (carray): array of boolean (one for each row) describing
+                    which rows to include
+
+            Returns:
+                ctable: a pivot table style aggregation
+        """
+
+        factor_list, values_list = self.factorize_groupby_cols(groupby_cols)
+        
     # groupby helper functions
     def factorize_groupby_cols(self, groupby_cols):
         """
