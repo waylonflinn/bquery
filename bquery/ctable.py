@@ -227,15 +227,16 @@ class ctable(bcolz.ctable):
 
         return ct_agg
 
-    def pivot(row_column_name, column_column_name, input_column_name, operation,
+    def pivot(row_group_name, column_group_name, input_column_name, operation,
             bool_arr=None):
         """
-            Aggregate into a pivot table style output.
-            two groupby columns, one defines rows, one defines columns
+            Aggregate into a pivot table style output. Each row
+            corresponds to a unique value in a category (group) and each column
+            corresponds to a unique value in a second category (group).
 
             Args:
-                row_column_name (string): column to group on to create rows
-                column_column_name (string): column to group on to create columns
+                row_group_name (string): column to group on to create rows
+                column_group_name (string): column to group on to create columns
                 input_column_name (string): column to perform operation on
                 operation (string): aggregate operation to use (see groupby)
                 bool_arr (carray): array of boolean (one for each row) describing
@@ -246,7 +247,12 @@ class ctable(bcolz.ctable):
         """
 
         factor_list, values_list = self.factorize_groupby_cols(groupby_cols)
-        
+
+        # create columns for each secondary category
+
+        # create skip bool_arr for each column, including only that columns
+        # values
+
     # groupby helper functions
     def factorize_groupby_cols(self, groupby_cols):
         """
@@ -290,21 +296,25 @@ class ctable(bcolz.ctable):
 
     def make_group_index(self, factor_list, values_list, groupby_cols,
                          array_length, bool_arr):
-        '''Create unique groups for groupby loop
+        '''Combine input factor_list carrays into a single set of groups
+            by finding all the unique co-occuring combinations.
 
             Args:
-                factor_list: list of ctables mapping each row to it's
-                    the row for it's groupby column value in the value_list
+                factor_list: list of ctables mapping each row in the input to
+                    it's groupby column value in the value_list
                 values_list: list of ctables containing all the distinct
                     values for each groupby column
                 groupby_cols: list of column names to group on
                 array_length:
-                bool_arr:
+                bool_arr (carray): a carray containing a row based filter.
+                    items marked False will be excluded.
 
             Returns:
-                carray: (factor_carray)
-                int: (nr_groups) the number of resulting groups
-                int: (skip_key)
+                carray: (factor_carray) a carray of unique combinations from all
+                    input factor_lists
+                int: (nr_groups) the number of resulting combinations
+                int: (skip_key) index of the group containing all the items
+                    excluded by the bool_arr filter.
         '''
 
         def _create_eval_str(groupby_cols, values_list, check_overflow=True):
