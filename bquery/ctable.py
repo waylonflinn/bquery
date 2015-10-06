@@ -227,7 +227,7 @@ class ctable(bcolz.ctable):
 
         return ct_agg
 
-    def pivot(row_group_name, column_group_name, input_column_name, operation,
+    def pivot(self, row_group_name, column_group_name, input_column_name, operation,
             bool_arr=None):
         """
             Aggregate into a pivot table style output. Each row
@@ -246,12 +246,14 @@ class ctable(bcolz.ctable):
                 ctable: a pivot table style aggregation
         """
 
-        factor_list, values_list = self.factorize_groupby_cols(groupby_cols)
+        factor_list, values_list = self.factorize_groupby_cols([row_group_name, column_group_name])
 
         # create columns for each secondary category
 
         # create skip bool_arr for each column, including only that columns
         # values
+
+        return factor_list, values_list
 
     # groupby helper functions
     def factorize_groupby_cols(self, groupby_cols):
@@ -264,7 +266,7 @@ class ctable(bcolz.ctable):
 
         Returns:
             list: (factor_list) list of ctables, each mapping a row in the
-                dataset to a row in the value_list
+                input table to a row in the value_list
             list: (value_list) list of ctables, each containing all the unique
                 values for a groupby column
         """
@@ -297,7 +299,9 @@ class ctable(bcolz.ctable):
     def make_group_index(self, factor_list, values_list, groupby_cols,
                          array_length, bool_arr):
         '''Combine input factor_list carrays into a single set of groups
-            by finding all the unique co-occuring combinations.
+            by finding all the unique co-occuring combinations then
+            generate a ctable mapping each row in the input ctable to a row in
+            the output ctable.
 
             Args:
                 factor_list: list of ctables mapping each row in the input to
@@ -310,8 +314,8 @@ class ctable(bcolz.ctable):
                     items marked False will be excluded.
 
             Returns:
-                carray: (factor_carray) a carray of unique combinations from all
-                    input factor_lists
+                carray: (factor_carray) a ctable mapping a row in the input
+                    ctable to a row in output ctable
                 int: (nr_groups) the number of resulting combinations
                 int: (skip_key) index of the group containing all the items
                     excluded by the bool_arr filter.
